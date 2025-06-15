@@ -18,8 +18,8 @@ interface AppState {
   dailyCatDate: string;
 }
 
-// In-memory storage that persists during the session
-let persistentStorage: { [key: string]: any } = {};
+// Use a more persistent approach by creating a deterministic cat based on the date
+// This ensures the same cat appears for the entire day regardless of refreshes
 
 function App() {
   const [appState, setAppState] = useState<AppState>({
@@ -77,63 +77,84 @@ function App() {
     },
   ];
 
-  // Save state to persistent storage
-  const saveState = (state: AppState) => {
-    persistentStorage['dailyCatState'] = JSON.stringify(state);
+  // Create a simple hash function for date-based seeding
+  const hashCode = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
   };
 
-  // Load state from persistent storage
+  // Use window object as persistent storage across refreshes
+  const saveState = (state: AppState) => {
+    try {
+      (window as any).dailyCatState = JSON.stringify(state);
+    } catch (error) {
+      console.error('Error saving state:', error);
+    }
+  };
+
+  // Load state from window object
   const loadState = (): AppState | null => {
-    const saved = persistentStorage['dailyCatState'];
-    if (saved) {
-      try {
+    try {
+      const saved = (window as any).dailyCatState;
+      if (saved) {
         return JSON.parse(saved);
-      } catch (error) {
-        console.error('Error parsing saved state:', error);
-        return null;
       }
+    } catch (error) {
+      console.error('Error loading state:', error);
     }
     return null;
   };
 
-  const fetchRandomCat = async (): Promise<CatData> => {
-    try {
-      const response = await fetch(
-        'https://api.thecatapi.com/v1/images/search',
-      );
-      const data = await response.json();
+  // Generate deterministic cat for today based on date
+  const getDeterministicCat = (dateString: string): CatData => {
+    const hash = hashCode(dateString);
 
-      if (data && data[0]) {
-        const randomFact =
-          catFacts[Math.floor(Math.random() * catFacts.length)];
-        const randomName =
-          catNames[Math.floor(Math.random() * catNames.length)];
+    // Use hash to determine if we show personal cat (30% chance)
+    const showPersonalCat = hash % 100 < 30 && personalCats.length > 0;
 
-        return {
-          id: `api-${data[0].id}`,
-          url: data[0].url,
-          fact: randomFact,
-          name: randomName,
-          isPersonal: false,
-        };
-      }
-    } catch (error) {
-      console.error('Error fetching cat:', error);
+    if (showPersonalCat) {
+      const personalIndex = hash % personalCats.length;
+      return personalCats[personalIndex];
     }
 
-    // Fallback cat if API fails
+    // For API cats, use deterministic selection
+    const factIndex = hash % catFacts.length;
+    const nameIndex = (hash + 1) % catNames.length;
+
+    // Create a deterministic cat ID based on date
+    const catId = `daily-${dateString.replace(/\s/g, '-')}`;
+
+    // Use a selection of predetermined cat images that are likely to work
+    const reliableCatImages = [
+      'https://images.pexels.com/photos/1170986/pexels-photo-1170986.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/416160/pexels-photo-416160.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/1543793/pexels-photo-1543793.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/1741205/pexels-photo-1741205.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/1056251/pexels-photo-1056251.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/2071873/pexels-photo-2071873.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/320014/pexels-photo-320014.jpeg?auto=compress&cs=tinysrgb&w=800',
+      'https://images.pexels.com/photos/1276553/pexels-photo-1276553.jpeg?auto=compress&cs=tinysrgb&w=800',
+    ];
+
+    const imageIndex = hash % reliableCatImages.length;
+
     return {
-      id: 'fallback-cat',
-      url: 'https://images.pexels.com/photos/1170986/pexels-photo-1170986.jpeg?auto=compress&cs=tinysrgb&w=800',
-      fact: "Sometimes the internet cats need a nap too! Here's a backup cutie.",
-      name: 'Backup',
+      id: catId,
+      url: reliableCatImages[imageIndex],
+      fact: catFacts[factIndex],
+      name: catNames[nameIndex],
       isPersonal: false,
     };
   };
 
-  const getDailyCat = async (
+  const getDailyCat = (
     savedState: AppState | null,
-  ): Promise<{ cat: CatData; isNewDay: boolean }> => {
+  ): { cat: CatData; isNewDay: boolean } => {
     const today = new Date().toDateString();
 
     // If we have a saved state and it's for today, return the current cat
@@ -145,18 +166,9 @@ function App() {
       return { cat: savedState.currentCat, isNewDay: false };
     }
 
-    // It's a new day or first visit - get a new cat
-    // 30% chance to show a personal cat, 70% chance for API cat
-    const showPersonalCat = Math.random() < 0.3 && personalCats.length > 0;
-
-    let newCat: CatData;
-    if (showPersonalCat) {
-      newCat = personalCats[Math.floor(Math.random() * personalCats.length)];
-    } else {
-      newCat = await fetchRandomCat();
-    }
-
-    return { cat: newCat, isNewDay: true };
+    // It's a new day or first visit - get deterministic cat for today
+    const todaysCat = getDeterministicCat(today);
+    return { cat: todaysCat, isNewDay: true };
   };
 
   const updateStreakAndVisits = (
@@ -247,13 +259,13 @@ function App() {
   };
 
   useEffect(() => {
-    const initializeApp = async () => {
+    const initializeApp = () => {
       // Load saved state
       const savedState = loadState();
       const today = new Date().toDateString();
 
       // Get today's cat (will be same cat if same day, new cat if new day)
-      const { cat: dailyCat, isNewDay } = await getDailyCat(savedState);
+      const { cat: dailyCat, isNewDay } = getDailyCat(savedState);
 
       // Calculate streak and visits
       const stats = updateStreakAndVisits(savedState, isNewDay);
