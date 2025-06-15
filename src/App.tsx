@@ -470,7 +470,7 @@ function App() {
             Your streak resets if you miss a day • Visit daily to keep it
             growing!
           </p>
-          <p className="text-xs mt-1 opacity-40">
+          <p className="text-xs mt-1">
             Fresh cats daily from around the internet + your special Gidget! 🐾
           </p>
         </div>
