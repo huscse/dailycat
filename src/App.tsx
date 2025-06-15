@@ -88,19 +88,51 @@ function App() {
     return Math.abs(hash);
   };
 
-  // Use window object as persistent storage across refreshes
+  // Create a more persistent storage solution using multiple approaches
+  const STORAGE_KEY = 'dailyCatState';
+
   const saveState = (state: AppState) => {
     try {
-      (window as any).dailyCatState = JSON.stringify(state);
+      const stateString = JSON.stringify(state);
+      // Try multiple storage approaches
+      (window as any).dailyCatState = stateString;
+
+      // Also try to use sessionStorage as backup (may work in some environments)
+      try {
+        sessionStorage.setItem(STORAGE_KEY, stateString);
+      } catch (e) {
+        // Silent fail if sessionStorage not available
+      }
+
+      // Store in a global variable as additional backup
+      (globalThis as any).dailyCatPersistentState = stateString;
     } catch (error) {
       console.error('Error saving state:', error);
     }
   };
 
-  // Load state from window object
+  // Load state from multiple sources
   const loadState = (): AppState | null => {
     try {
-      const saved = (window as any).dailyCatState;
+      let saved = null;
+
+      // Try to load from sessionStorage first
+      try {
+        saved = sessionStorage.getItem(STORAGE_KEY);
+      } catch (e) {
+        // Silent fail
+      }
+
+      // Fallback to window object
+      if (!saved) {
+        saved = (window as any).dailyCatState;
+      }
+
+      // Fallback to global variable
+      if (!saved) {
+        saved = (globalThis as any).dailyCatPersistentState;
+      }
+
       if (saved) {
         return JSON.parse(saved);
       }
@@ -178,8 +210,8 @@ function App() {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
 
-    if (!isNewDay && savedState) {
-      // Same day visit - don't update stats, just load existing ones
+    // If we have saved state from the same day, don't update visits
+    if (savedState && savedState.lastVisit === today && !isNewDay) {
       return {
         streak: savedState.streak,
         totalVisits: savedState.totalVisits,
@@ -187,12 +219,15 @@ function App() {
       };
     }
 
-    // This is a new day visit
+    // This is either a new day or a new session (closed/reopened browser)
     let newStreak = savedState ? savedState.streak : 0;
     let newTotalVisits = savedState ? savedState.totalVisits : 0;
 
-    if (!savedState || savedState.lastVisit !== today) {
-      // Update total visits for new day
+    // Check if we need to update visit count
+    const shouldUpdateVisits = !savedState || savedState.lastVisit !== today;
+
+    if (shouldUpdateVisits) {
+      // Update total visits for new day or new session
       newTotalVisits = newTotalVisits + 1;
 
       // Update streak logic
@@ -202,6 +237,9 @@ function App() {
       } else if (savedState.lastVisit === yesterday) {
         // Consecutive day - increment streak
         newStreak = savedState.streak + 1;
+      } else if (savedState.lastVisit === today) {
+        // Same day but new session - keep current streak
+        newStreak = savedState.streak;
       } else {
         // Gap in visits - reset streak to 1
         newStreak = 1;
