@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Calendar, Share2, Sparkles } from 'lucide-react';
 
 interface CatData {
@@ -16,6 +16,7 @@ interface AppState {
   totalVisits: number;
   favorites: string[];
   dailyCatDate: string;
+  lastSessionId: string; // Track unique sessions
 }
 
 // Use a more persistent approach by creating a deterministic cat based on the date
@@ -29,9 +30,11 @@ function App() {
     totalVisits: 0,
     favorites: [],
     dailyCatDate: '',
+    lastSessionId: '',
   });
   const [loading, setLoading] = useState(true);
   const [showHeart, setShowHeart] = useState(false);
+  const hasInitialized = useRef(false);
 
   const catFacts = [
     "Black cats are considered lucky in many cultures! In Japan, they're believed to bring good fortune and ward off evil spirits.",
@@ -76,6 +79,11 @@ function App() {
       isPersonal: true,
     },
   ];
+
+  // Generate a unique session ID for each app load
+  const generateSessionId = (): string => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  };
 
   // Create a simple hash function for date-based seeding
   const hashCode = (str: string): number => {
@@ -206,50 +214,45 @@ function App() {
   const updateStreakAndVisits = (
     savedState: AppState | null,
     isNewDay: boolean,
+    currentSessionId: string,
   ) => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
 
-    // If we have saved state from the same day, don't update visits
-    if (savedState && savedState.lastVisit === today && !isNewDay) {
-      return {
-        streak: savedState.streak,
-        totalVisits: savedState.totalVisits,
-        lastVisit: savedState.lastVisit,
-      };
-    }
+    // Always increment visits for new sessions (when app loads/reloads)
+    const isNewSession =
+      !savedState || savedState.lastSessionId !== currentSessionId;
 
-    // This is either a new day or a new session (closed/reopened browser)
     let newStreak = savedState ? savedState.streak : 0;
     let newTotalVisits = savedState ? savedState.totalVisits : 0;
 
-    // Check if we need to update visit count
-    const shouldUpdateVisits = !savedState || savedState.lastVisit !== today;
-
-    if (shouldUpdateVisits) {
-      // Update total visits for new day or new session
+    // Always increment visits for new sessions
+    if (isNewSession) {
       newTotalVisits = newTotalVisits + 1;
+    }
 
-      // Update streak logic
+    // Update streak logic only for new days
+    if (isNewDay) {
       if (!savedState || savedState.lastVisit === '') {
         // First ever visit
         newStreak = 1;
       } else if (savedState.lastVisit === yesterday) {
         // Consecutive day - increment streak
         newStreak = savedState.streak + 1;
-      } else if (savedState.lastVisit === today) {
-        // Same day but new session - keep current streak
-        newStreak = savedState.streak;
       } else {
         // Gap in visits - reset streak to 1
         newStreak = 1;
       }
+    } else if (savedState) {
+      // Same day, keep existing streak
+      newStreak = savedState.streak;
     }
 
     return {
       streak: newStreak,
       totalVisits: newTotalVisits,
-      lastVisit: today,
+      lastVisit: isNewDay ? today : savedState?.lastVisit || today,
+      lastSessionId: currentSessionId,
     };
   };
 
@@ -298,6 +301,13 @@ function App() {
 
   useEffect(() => {
     const initializeApp = () => {
+      // Prevent double initialization using ref
+      if (hasInitialized.current) return;
+      hasInitialized.current = true;
+
+      // Generate unique session ID for this app load
+      const currentSessionId = generateSessionId();
+
       // Load saved state
       const savedState = loadState();
       const today = new Date().toDateString();
@@ -305,8 +315,12 @@ function App() {
       // Get today's cat (will be same cat if same day, new cat if new day)
       const { cat: dailyCat, isNewDay } = getDailyCat(savedState);
 
-      // Calculate streak and visits
-      const stats = updateStreakAndVisits(savedState, isNewDay);
+      // Calculate streak and visits (visits increment every session)
+      const stats = updateStreakAndVisits(
+        savedState,
+        isNewDay,
+        currentSessionId,
+      );
 
       // Create the new state
       const newState: AppState = {
@@ -379,7 +393,7 @@ function App() {
               {appState.totalVisits}
             </div>
             <div className="text-white/80 text-sm">Total Visits</div>
-            <div className="text-white/60 text-xs mt-1">Since day one</div>
+            <div className="text-white/60 text-xs mt-1">Every session</div>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center md:col-span-1 col-span-2 transform hover:scale-105 transition-transform duration-200">
             <div className="text-2xl font-bold text-white flex items-center justify-center gap-1">
