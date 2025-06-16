@@ -211,13 +211,27 @@ function App() {
     return { cat: todaysCat, isNewDay: true };
   };
 
+  // Helper function to get date in YYYY-MM-DD format for consistent comparison
+  const getDateKey = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // Helper function to check if two dates are consecutive days
+  const areConsecutiveDays = (dateStr1: string, dateStr2: string): boolean => {
+    const date1 = new Date(dateStr1);
+    const date2 = new Date(dateStr2);
+    const diffTime = Math.abs(date2.getTime() - date1.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays === 1;
+  };
+
   const updateStreakAndVisits = (
     savedState: AppState | null,
     isNewDay: boolean,
     currentSessionId: string,
   ) => {
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    const today = getDateKey(new Date());
+    const yesterday = getDateKey(new Date(Date.now() - 86400000));
 
     // Always increment visits for new sessions (when app loads/reloads)
     const isNewSession =
@@ -231,17 +245,22 @@ function App() {
       newTotalVisits = newTotalVisits + 1;
     }
 
-    // Update streak logic only for new days
+    // Update streak logic - FIXED VERSION
     if (isNewDay) {
-      if (!savedState || savedState.lastVisit === '') {
+      if (!savedState || !savedState.lastVisit) {
         // First ever visit
         newStreak = 1;
-      } else if (savedState.lastVisit === yesterday) {
-        // Consecutive day - increment streak
-        newStreak = savedState.streak + 1;
       } else {
-        // Gap in visits - reset streak to 1
-        newStreak = 1;
+        // Convert stored lastVisit to consistent format for comparison
+        const lastVisitDate = getDateKey(new Date(savedState.lastVisit));
+
+        if (lastVisitDate === yesterday) {
+          // Consecutive day - increment streak
+          newStreak = savedState.streak + 1;
+        } else {
+          // Gap in visits - reset streak to 1
+          newStreak = 1;
+        }
       }
     } else if (savedState) {
       // Same day, keep existing streak
