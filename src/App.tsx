@@ -249,7 +249,7 @@ function App() {
     if (isNewDay) {
       if (!savedState || !savedState.lastVisit) {
         // First ever visit
-        newStreak = 1;
+        newStreak = 2;
       } else {
         // Convert stored lastVisit to consistent format for comparison
         const lastVisitDate = getDateKey(new Date(savedState.lastVisit));
