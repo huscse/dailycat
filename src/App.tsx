@@ -96,49 +96,48 @@ function App() {
     return Math.abs(hash);
   };
 
-  // Create a more persistent storage solution using multiple approaches
   const STORAGE_KEY = 'dailyCatState';
 
   const saveState = (state: AppState) => {
     try {
       const stateString = JSON.stringify(state);
-      // Try multiple storage approaches
-      (window as any).dailyCatState = stateString;
 
-      // Also try to use sessionStorage as backup (may work in some environments)
+      // Save to localStorage for persistence across browser sessions
+      localStorage.setItem(STORAGE_KEY, stateString);
+
+      // Fallbacks
+      (window as any).dailyCatState = stateString;
       try {
         sessionStorage.setItem(STORAGE_KEY, stateString);
-      } catch (e) {
-        // Silent fail if sessionStorage not available
-      }
-
-      // Store in a global variable as additional backup
+      } catch {}
       (globalThis as any).dailyCatPersistentState = stateString;
     } catch (error) {
       console.error('Error saving state:', error);
     }
   };
 
-  // Load state from multiple sources
   const loadState = (): AppState | null => {
     try {
-      let saved = null;
+      let saved: string | null = null;
 
-      // Try to load from sessionStorage first
+      // Try to load from localStorage first (persistent)
       try {
-        saved = sessionStorage.getItem(STORAGE_KEY);
-      } catch (e) {
-        // Silent fail
+        saved = localStorage.getItem(STORAGE_KEY);
+      } catch {}
+
+      // Then sessionStorage fallback (cleared on tab close)
+      if (!saved) {
+        try {
+          saved = sessionStorage.getItem(STORAGE_KEY);
+        } catch {}
       }
 
-      // Fallback to window object
+      // Then fallback to window/global variables (temporary)
       if (!saved) {
-        saved = (window as any).dailyCatState;
-      }
-
-      // Fallback to global variable
-      if (!saved) {
-        saved = (globalThis as any).dailyCatPersistentState;
+        saved =
+          (window as any).dailyCatState ||
+          (globalThis as any).dailyCatPersistentState ||
+          null;
       }
 
       if (saved) {
@@ -372,8 +371,7 @@ function App() {
       // Update streak & visits here
       let stats = updateStreakAndVisits(savedState, currentSessionId);
 
-      // --- Add this block to manually set streak to 3 and lastVisit to yesterday if needed ---
-      // Only for testing or manual override; remove or comment out in production
+      // Manually force streak and lastVisit persistently (override saved state)
       if (savedState && savedState.streak < 3) {
         const yesterday = new Date(Date.now() - 86400000).toDateString();
         stats = {
@@ -381,9 +379,23 @@ function App() {
           streak: 3,
           lastVisit: yesterday,
         };
-      }
-      // ---------------------------------------------------------------------------------------
 
+        // Create newState including forced streak and lastVisit
+        const forcedState = {
+          currentCat: dailyCat,
+          dailyCatDate: today,
+          favorites: savedState?.favorites || [],
+          ...stats,
+        };
+
+        // Save forcibly updated state to persistent storage
+        saveState(forcedState);
+        setAppState(forcedState);
+        setLoading(false);
+        return; // Exit early to avoid double set
+      }
+
+      // Normal flow for all other cases
       const newState: AppState = {
         currentCat: dailyCat,
         dailyCatDate: today,
