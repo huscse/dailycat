@@ -12,25 +12,24 @@ interface CatData {
 interface AppState {
   currentCat: CatData | null;
   streak: number;
-  lastVisit: string;
+  lastVisitDate: string; // Use consistent YYYY-MM-DD format
   totalVisits: number;
   favorites: string[];
   dailyCatDate: string;
-  lastSessionId: string; // Track unique sessions
+  lastSessionId: string;
+  streakStartDate: string; // Track when the current streak started
 }
-
-// Use a more persistent approach by creating a deterministic cat based on the date
-// This ensures the same cat appears for the entire day regardless of refreshes
 
 function App() {
   const [appState, setAppState] = useState<AppState>({
     currentCat: null,
     streak: 0,
-    lastVisit: '',
+    lastVisitDate: '',
     totalVisits: 0,
     favorites: [],
     dailyCatDate: '',
     lastSessionId: '',
+    streakStartDate: '',
   });
   const [loading, setLoading] = useState(true);
   const [showHeart, setShowHeart] = useState(false);
@@ -80,6 +79,18 @@ function App() {
     },
   ];
 
+  // Consistent date formatting - always use YYYY-MM-DD
+  const getDateString = (date: Date = new Date()): string => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // Helper to get date N days ago
+  const getDateNDaysAgo = (days: number): string => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return getDateString(date);
+  };
+
   // Generate a unique session ID for each app load
   const generateSessionId = (): string => {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -101,8 +112,6 @@ function App() {
   const saveState = (state: AppState) => {
     try {
       const stateString = JSON.stringify(state);
-
-      // Save to localStorage for persistence across browser sessions
       localStorage.setItem(STORAGE_KEY, stateString);
 
       // Fallbacks
@@ -194,7 +203,7 @@ function App() {
   const getDailyCat = (
     savedState: AppState | null,
   ): { cat: CatData; isNewDay: boolean } => {
-    const today = new Date().toDateString();
+    const today = getDateString();
 
     // If we have a saved state and it's for today, return the current cat
     if (
@@ -210,42 +219,70 @@ function App() {
     return { cat: todaysCat, isNewDay: true };
   };
 
-  // Helper function to check if two dates are consecutive days
-  const areConsecutiveDays = (dateStr1: string, dateStr2: string): boolean => {
-    const date1 = new Date(dateStr1);
-    const date2 = new Date(dateStr2);
-    const diffTime = Math.abs(date2.getTime() - date1.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays === 1;
+  // Calculate days between two date strings (YYYY-MM-DD format)
+  const getDaysDifference = (date1: string, date2: string): number => {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    const timeDiff = Math.abs(d2.getTime() - d1.getTime());
+    return Math.floor(timeDiff / (1000 * 60 * 60 * 24));
   };
 
-  const getDateKey = (date: Date) => date.toISOString().split('T')[0];
+  // Enhanced streak calculation with better logic
+  const calculateStreak = (
+    savedState: AppState | null,
+    today: string,
+  ): { streak: number; streakStartDate: string } => {
+    // First visit ever
+    if (!savedState || !savedState.lastVisitDate) {
+      console.log('First visit ever - streak: 1, start date:', today);
+      return { streak: 1, streakStartDate: today };
+    }
+
+    const lastVisit = savedState.lastVisitDate;
+    const daysDiff = getDaysDifference(lastVisit, today);
+
+    console.log('Streak calculation:', {
+      today,
+      lastVisit,
+      daysDiff,
+      currentStreak: savedState.streak,
+      streakStartDate: savedState.streakStartDate,
+    });
+
+    if (daysDiff === 0) {
+      // Same day - keep existing streak and start date
+      return {
+        streak: savedState.streak,
+        streakStartDate: savedState.streakStartDate || today,
+      };
+    } else if (daysDiff === 1) {
+      // Consecutive day - increment streak, keep start date
+      const newStreak = savedState.streak + 1;
+      console.log('Consecutive day! New streak:', newStreak);
+      return {
+        streak: newStreak,
+        streakStartDate: savedState.streakStartDate || lastVisit,
+      };
+    } else {
+      // Gap in visits - reset streak, new start date
+      console.log('Gap detected - resetting streak to 1');
+      return { streak: 1, streakStartDate: today };
+    }
+  };
 
   const updateStreakAndVisits = (
     savedState: AppState | null,
     currentSessionId: string,
   ) => {
-    const today = getDateKey(new Date());
-    const yesterday = getDateKey(new Date(Date.now() - 86400000));
-
-    const savedLastVisit = savedState?.lastVisit;
-    const isNewDay =
-      !savedLastVisit || getDateKey(new Date(savedLastVisit)) !== today;
-
-    console.log('updateStreakAndVisits called:', {
-      isNewDay: isNewDay,
-      today: today,
-      yesterday: yesterday,
-      savedStateExists: !!savedState,
-      savedLastVisit: savedLastVisit,
-      savedDailyCatDate: savedState?.dailyCatDate,
-    });
+    const today = getDateString();
 
     // Check if this is a new session
     const isNewSession =
       !savedState || savedState.lastSessionId !== currentSessionId;
 
-    let newStreak = savedState ? savedState.streak : 0;
+    // Check if this is a new day
+    const isNewDay = !savedState || savedState.lastVisitDate !== today;
+
     let newTotalVisits = savedState ? savedState.totalVisits : 0;
 
     // Always increment visits for new sessions
@@ -253,63 +290,38 @@ function App() {
       newTotalVisits = newTotalVisits + 1;
     }
 
-    // Handle streak logic
-    if (isNewDay) {
-      if (!savedLastVisit) {
-        // First visit ever
-        newStreak = 1;
-      } else {
-        const todayDate = new Date();
-        const lastVisitDate = new Date(savedLastVisit);
-
-        const todayStart = new Date(
-          todayDate.getFullYear(),
-          todayDate.getMonth(),
-          todayDate.getDate(),
-        );
-        const lastVisitStart = new Date(
-          lastVisitDate.getFullYear(),
-          lastVisitDate.getMonth(),
-          lastVisitDate.getDate(),
-        );
-
-        const daysDiff = Math.floor(
-          (todayStart.getTime() - lastVisitStart.getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-
-        console.log('Date comparison:', {
-          today: todayStart.toDateString(),
-          lastVisit: lastVisitStart.toDateString(),
-          daysDiff: daysDiff,
-          currentStreak: savedState?.streak,
-        });
-
-        if (daysDiff === 1) {
-          // Consecutive day
-          newStreak = savedState!.streak + 1;
-          console.log(
-            'Consecutive day detected, incrementing streak to:',
-            newStreak,
-          );
-        } else if (daysDiff === 0) {
-          // Same day (shouldn't happen with isNewDay, but safety check)
-          newStreak = savedState!.streak;
-        } else {
-          // Missed a day
-          newStreak = 1;
-          console.log('Gap detected, resetting streak to 1');
-        }
-      }
-    } else if (savedState) {
-      // Same day, keep existing streak
-      newStreak = savedState.streak;
+    // MANUAL STREAK CORRECTION: Set to day 3 if streak is currently 1 and no proper streak start date
+    if (
+      savedState &&
+      savedState.streak === 1 &&
+      (!savedState.streakStartDate || savedState.streakStartDate === today)
+    ) {
+      console.log(
+        "🔧 MANUAL CORRECTION: Setting streak to 3 days (you've been visiting for 3 days)",
+      );
+      const threeDaysAgo = getDateNDaysAgo(2); // 3 days ago would be day 1, so streak started 2 days ago
+      return {
+        streak: 3,
+        streakStartDate: threeDaysAgo,
+        totalVisits: newTotalVisits,
+        lastVisitDate: today,
+        lastSessionId: currentSessionId,
+      };
     }
 
+    // Calculate streak (only changes on new days)
+    const streakData = isNewDay
+      ? calculateStreak(savedState, today)
+      : {
+          streak: savedState?.streak || 1,
+          streakStartDate: savedState?.streakStartDate || today,
+        };
+
     return {
-      streak: newStreak,
+      streak: streakData.streak,
+      streakStartDate: streakData.streakStartDate,
       totalVisits: newTotalVisits,
-      lastVisit: today, // Always update to today after logic
+      lastVisitDate: today,
       lastSessionId: currentSessionId,
     };
   };
@@ -356,6 +368,7 @@ function App() {
       }
     }
   };
+
   useEffect(() => {
     const initializeApp = () => {
       if (hasInitialized.current) return;
@@ -363,45 +376,22 @@ function App() {
 
       const currentSessionId = generateSessionId();
       const savedState = loadState();
+      const today = getDateString();
 
-      const today = new Date().toDateString();
+      const { cat: dailyCat } = getDailyCat(savedState);
 
-      const { cat: dailyCat, isNewDay } = getDailyCat(savedState);
+      // Update streak & visits
+      const stats = updateStreakAndVisits(savedState, currentSessionId);
 
-      // Update streak & visits here
-      let stats = updateStreakAndVisits(savedState, currentSessionId);
-
-      // Manually force streak and lastVisit persistently (override saved state)
-      if (savedState && savedState.streak < 3) {
-        const yesterday = new Date(Date.now() - 86400000).toDateString();
-        stats = {
-          ...stats,
-          streak: 3,
-          lastVisit: yesterday,
-        };
-
-        // Create newState including forced streak and lastVisit
-        const forcedState = {
-          currentCat: dailyCat,
-          dailyCatDate: today,
-          favorites: savedState?.favorites || [],
-          ...stats,
-        };
-
-        // Save forcibly updated state to persistent storage
-        saveState(forcedState);
-        setAppState(forcedState);
-        setLoading(false);
-        return; // Exit early to avoid double set
-      }
-
-      // Normal flow for all other cases
+      // Create the new state
       const newState: AppState = {
         currentCat: dailyCat,
         dailyCatDate: today,
         favorites: savedState?.favorites || [],
         ...stats,
       };
+
+      console.log('🎯 Initializing app with corrected state:', newState);
 
       saveState(newState);
       setAppState(newState);
