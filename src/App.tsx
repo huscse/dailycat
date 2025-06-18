@@ -9,14 +9,10 @@ const App: React.FC = () => {
           We couldn’t load the website. Please check your connection or try again later.
         </p>
         <p style={styles.contact}>
-          If the problem persists, contact the developer at{' '}
-          <a href="mailto:dev@example.com" style={styles.link}>
-            dev@example.com
+          If the problem persists, contact the developer.
+          <a style={styles.link}>
           </a>
         </p>
-        <button style={styles.button} onClick={() => window.location.reload()}>
-          Retry
-        </button>
       </div>
     </div>
   );
