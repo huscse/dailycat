@@ -1,12 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Heart, Calendar, Share2, Sparkles } from 'lucide-react';
-
-interface CatData {
-  id: string;
-  url: string;
-  fact: string;
-  name: string;
-  isPersonal?: boolean;
+;
 }
 
 interface AppState {
