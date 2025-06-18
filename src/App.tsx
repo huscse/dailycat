@@ -162,8 +162,8 @@ function App() {
   const getDeterministicCat = (dateString: string): CatData => {
     const hash = hashCode(dateString);
 
-    // Use hash to determine if we show personal cat (30% chance)
-    const showPersonalCat = hash % 100 < 30 && personalCats.length > 0;
+    // Use hash to determine if we show personal cat (70% chance)
+    const showPersonalCat = hash % 100 < 70 && personalCats.length > 0;
 
     if (showPersonalCat) {
       const personalIndex = hash % personalCats.length;
