@@ -1,30 +1,74 @@
-// App.tsx
 import React from 'react';
 
 const App: React.FC = () => {
   return (
     <div style={styles.container}>
-      <h1 style={styles.errorText}>Error loading page</h1>
+      <div style={styles.errorBox}>
+        <h1 style={styles.title}>Oops! Something went wrong.</h1>
+        <p style={styles.message}>
+          We couldn’t load the website. Please check your connection or try again later.
+        </p>
+        <p style={styles.contact}>
+          If the problem persists, contact the developer at{' '}
+          <a href="mailto:dev@example.com" style={styles.link}>
+            dev@example.com
+          </a>
+        </p>
+        <button style={styles.button} onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
     </div>
   );
 };
 
-const styles = {
+const styles: { [key: string]: React.CSSProperties } = {
   container: {
     display: 'flex',
     height: '100vh',
+    width: '100vw',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8d7da',
-  } as React.CSSProperties,
-  errorText: {
-    color: '#721c24',
-    backgroundColor: '#f8d7da',
-    padding: '1rem 2rem',
-    border: '1px solid #f5c6cb',
+    backgroundColor: '#f8f8f8',
+    fontFamily: 'Segoe UI, sans-serif',
+  },
+  errorBox: {
+    textAlign: 'center',
+    padding: '40px',
+    backgroundColor: '#fff',
+    border: '1px solid #ccc',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    maxWidth: '500px',
+  },
+  title: {
+    fontSize: '24px',
+    color: '#d32f2f',
+    marginBottom: '10px',
+  },
+  message: {
+    fontSize: '16px',
+    color: '#333',
+    marginBottom: '20px',
+  },
+  contact: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '30px',
+  },
+  link: {
+    color: '#1976d2',
+    textDecoration: 'none',
+  },
+  button: {
+    padding: '10px 20px',
+    backgroundColor: '#1976d2',
+    color: '#fff',
+    border: 'none',
     borderRadius: '8px',
-    fontFamily: 'Arial, sans-serif',
-  } as React.CSSProperties,
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
 };
 
 export default App;
